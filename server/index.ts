@@ -26,9 +26,8 @@ import { HTTPFacilitatorClient } from '@x402/core/server'
 import logger from './logger'
 import {
   STELLAR_NETWORK,
-  HORIZON_URL, 
-  AMOUNT_USDC, 
-  AMOUNT_STROOPS 
+  AMOUNT_USDC,
+  AMOUNT_STROOPS
 } from '../src/lib/constants'
 
 dotenv.config()
@@ -155,12 +154,12 @@ app.use((req, res, next) => {
 
 app.use(paymentMiddlewareFromConfig(x402Routes, facilitatorClient, schemes))
 
-const MAX_QUERY_LENGTH = 256
+export const MAX_QUERY_LENGTH = 256
 
 // Validate and sanitize the user-supplied `q` parameter. Returns either the
 // cleaned string or a 400 response body to send back. Centralised so /search
 // and /images share the same rules.
-function validateQuery(
+export function validateQuery(
   q: unknown,
 ): { ok: true; cleanQ: string } | { ok: false; error: string } {
   if (typeof q !== 'string' || !q.trim()) {
@@ -428,92 +427,6 @@ app.get('/news', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[news error]', err.message)
     return res.status(500).json({ error: 'News search failed. Check server logs.' })
-  }
-})
-
-// ─── POST /ai/chat ────────────────────────────────────────────────────────
-// Streams responses as Server-Sent Events when the client sends
-// `Accept: text/event-stream`; otherwise returns the full completion as JSON
-// (back-compat fallback for callers that don't support SSE).
-app.post('/ai/chat', async (req: Request, res: Response) => {
-  const { messages } = req.body as {
-    messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
-  }
-
-  if (!messages?.length) {
-    return res.status(400).json({ error: 'messages array required' })
-  }
-
-  const wantsStream =
-    (req.headers.accept || '').includes('text/event-stream') ||
-    req.query.stream === '1'
-
-  const groqMessages = [
-    {
-      role: 'system' as const,
-      content:
-        'You are StellarSearch AI, a concise research assistant. Help users craft better search queries and understand results. Keep responses under 200 words.',
-    },
-    ...messages,
-  ]
-
-  if (!wantsStream) {
-    try {
-      const completion = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: groqMessages,
-        max_tokens:  512,
-        temperature: 0.7,
-      })
-
-      const content = completion.choices[0]?.message?.content || 'No response.'
-      return res.json({ content, model: completion.model })
-    } catch (err: any) {
-      console.error('[groq error]', err.message)
-      return res.status(500).json({ error: `Groq AI error: ${err.message}` })
-    }
-  }
-
-  // SSE path
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache, no-transform')
-  res.setHeader('Connection', 'keep-alive')
-  // Disable proxy buffering (e.g. nginx) so chunks flush immediately
-  res.setHeader('X-Accel-Buffering', 'no')
-  res.flushHeaders?.()
-
-  const sendEvent = (event: string, data: Record<string, unknown>) => {
-    res.write(`event: ${event}\n`)
-    res.write(`data: ${JSON.stringify(data)}\n\n`)
-  }
-
-  // Abort the Groq stream if the client disconnects mid-response.
-  const controller = new AbortController()
-  req.on('close', () => controller.abort())
-
-  try {
-    const stream = await groq.chat.completions.create(
-      {
-        model: 'llama-3.3-70b-versatile',
-        messages: groqMessages,
-        max_tokens:  512,
-        temperature: 0.7,
-        stream: true,
-      },
-      { signal: controller.signal },
-    )
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content
-      if (delta) sendEvent('delta', { content: delta })
-    }
-    sendEvent('done', { model: 'llama-3.3-70b-versatile' })
-    res.end()
-  } catch (err: any) {
-    if (controller.signal.aborted) return res.end()
-    console.error('[groq stream error]', err.message)
-    sendEvent('error', { error: `Groq AI error: ${err.message}` })
-    res.end()
   }
 })
 
