@@ -4,7 +4,7 @@ import {
   Wallet, ChevronDown, ExternalLink,
   Copy, CheckCheck, RefreshCw, LogOut, AlertCircle,
 } from 'lucide-react'
-import type { WalletState, StellarTransaction } from '../../hooks/useFreighterWallet'
+import type { WalletState, StellarTransaction, ResourceState } from '../../hooks/useFreighterWallet'
 import {
   truncateAddress, truncateHash,
   explorerAccountUrl, explorerTxUrl, formatTimeAgo,
@@ -15,15 +15,42 @@ interface Props {
   wallet: WalletState
   transactions: StellarTransaction[]
   txLoading: boolean
+  // Independent resource states — each exposes loading/error/lastUpdated
+  balance?: ResourceState
+  history?: ResourceState
+  connection?: ResourceState
+  // Backward-compatible flat props (optional)
+  balanceLoading?: boolean
+  balanceError?: string | null
+  balanceLastUpdated?: string | null
+  txError?: string | null
+  txLastUpdated?: string | null
   onConnect: () => void
   onDisconnect: () => void
   onRefresh: () => void
+  onRefreshBalances?: () => void
+  onRefreshHistory?: () => void
 }
 
 export function WalletPanel({
   wallet, transactions, txLoading,
+  balance, history, connection,
+  balanceLoading, balanceError, balanceLastUpdated,
+  txError, txLastUpdated,
   onConnect, onDisconnect, onRefresh,
+  onRefreshBalances, onRefreshHistory,
 }: Props) {
+  // Resolve independent resource states with backward-compatible fallbacks
+  const balanceState: ResourceState = balance ?? {
+    loading: balanceLoading ?? false,
+    error: balanceError ?? null,
+    lastUpdated: balanceLastUpdated ?? null,
+  }
+  // history.loading is txLoading for rendering consistency
+  const historyLoading = history?.loading ?? txLoading
+  const historyError = history?.error ?? txError ?? null
+  const historyLastUpdated = history?.lastUpdated ?? txLastUpdated ?? null
+  const connectionState: ResourceState | null = connection ?? null
   const [open, setOpen]     = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -136,46 +163,104 @@ export function WalletPanel({
                 </button>
               </div>
 
-              {/* Balances */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="py-2 px-3 rounded-lg bg-white/5">
-                  <p className="font-display text-white/30" style={{ fontSize: '9px' }}>USDC BALANCE</p>
-                  <p className="font-display text-lg text-neon-amber mt-0.5">{wallet.usdcBalance}</p>
-                  <p className="font-display text-white/25 mt-0.5" style={{ fontSize: '9px' }}>
-                    ~{Math.floor(parseFloat(wallet.usdcBalance) / parseFloat(AMOUNT_USDC)).toLocaleString()} queries
-                  </p>
-                </div>
-                <div className="py-2 px-3 rounded-lg bg-white/5">
-                  <p className="font-display text-white/30" style={{ fontSize: '9px' }}>XLM BALANCE</p>
-                  <p className="font-display text-lg text-neon-cyan mt-0.5">{wallet.xlmBalance}</p>
-                  <p className="font-display text-white/25 mt-0.5" style={{ fontSize: '9px' }}>for gas fees</p>
-                </div>
-              </div>
-
+              {/* Connection error — independent from balance/history */}
               {wallet.error && (
                 <div className="mt-2 flex items-center gap-2 py-1.5 px-2 rounded bg-red-500/10 border border-red-500/20">
                   <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
                   <p className="text-xs text-red-300">{wallet.error}</p>
                 </div>
               )}
+              {connectionState?.error && connectionState.error !== wallet.error && (
+                <div className="mt-2 flex items-center gap-2 py-1.5 px-2 rounded bg-red-500/10 border border-red-500/20">
+                  <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
+                  <p className="text-xs text-red-300">Connection: {connectionState.error}</p>
+                </div>
+              )}
+
+              {/* Balances — independent resource */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-display text-white/30 tracking-widest" style={{ fontSize: '9px' }}>BALANCES</span>
+                  <div className="flex items-center gap-2">
+                    {balanceState.lastUpdated && (
+                      <span className="font-display text-white/20" style={{ fontSize: '8px' }}>
+                        Updated {formatTimeAgo(balanceState.lastUpdated)}
+                      </span>
+                    )}
+                    <button
+                      onClick={onRefreshBalances ?? onRefresh}
+                      disabled={balanceState.loading}
+                      className="p-1 text-white/30 hover:text-neon-amber transition-colors disabled:opacity-50"
+                      aria-label="Refresh balances"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${balanceState.loading ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="py-2 px-3 rounded-lg bg-white/5 relative">
+                    <p className="font-display text-white/30" style={{ fontSize: '9px' }}>USDC BALANCE</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-display text-lg text-neon-amber mt-0.5">{wallet.usdcBalance}</p>
+                      {balanceState.loading && (
+                        <motion.div className="w-3 h-3 rounded-full border border-neon-amber/30 border-t-neon-amber" animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} />
+                      )}
+                    </div>
+                    <p className="font-display text-white/25 mt-0.5" style={{ fontSize: '9px' }}>
+                      ~{Math.floor(parseFloat(wallet.usdcBalance) / parseFloat(AMOUNT_USDC)).toLocaleString()} queries
+                    </p>
+                  </div>
+                  <div className="py-2 px-3 rounded-lg bg-white/5 relative">
+                    <p className="font-display text-white/30" style={{ fontSize: '9px' }}>XLM BALANCE</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-display text-lg text-neon-cyan mt-0.5">{wallet.xlmBalance}</p>
+                      {balanceState.loading && (
+                        <motion.div className="w-3 h-3 rounded-full border border-neon-cyan/30 border-t-neon-cyan" animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} />
+                      )}
+                    </div>
+                    <p className="font-display text-white/25 mt-0.5" style={{ fontSize: '9px' }}>for gas fees</p>
+                  </div>
+                </div>
+                {balanceState.error && (
+                  <div className="mt-2 flex items-center gap-2 py-1.5 px-2 rounded bg-amber-500/10 border border-amber-500/20">
+                    <AlertCircle className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                    <p className="text-xs text-amber-300">Balance: {balanceState.error}</p>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Transactions */}
+            {/* Transactions — independent resource */}
             <div className="p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-display text-white/30 tracking-widest" style={{ fontSize: '10px' }}>
-                  RECENT TRANSACTIONS
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-white/30 tracking-widest" style={{ fontSize: '10px' }}>
+                    RECENT TRANSACTIONS
+                  </span>
+                  {historyLastUpdated && (
+                    <span className="font-display text-white/20" style={{ fontSize: '8px' }}>
+                      Updated {formatTimeAgo(historyLastUpdated)}
+                    </span>
+                  )}
+                </div>
                 <button
-                  onClick={onRefresh}
-                  disabled={txLoading}
+                  onClick={onRefreshHistory ?? onRefresh}
+                  disabled={historyLoading}
                   className="p-1 text-white/30 hover:text-neon-cyan transition-colors disabled:opacity-50"
+                  aria-label="Refresh history"
                 >
-                  <RefreshCw className={`w-3 h-3 ${txLoading ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3 h-3 ${historyLoading ? 'animate-spin' : ''}`} />
                 </button>
               </div>
 
-              {txLoading ? (
+              {historyError && (
+                <div className="mb-2 flex items-center gap-2 py-1.5 px-2 rounded bg-amber-500/10 border border-amber-500/20">
+                  <AlertCircle className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                  <p className="text-xs text-amber-300">History: {historyError}</p>
+                </div>
+              )}
+
+              {historyLoading ? (
                 <div className="flex justify-center py-4">
                   <motion.div
                     className="w-4 h-4 rounded-full border border-neon-cyan/30 border-t-neon-cyan"

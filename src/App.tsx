@@ -16,7 +16,8 @@ export default function App() {
 
   const {
     wallet, transactions, txLoading,
-    connect, disconnect, refresh,
+    balance, history, connection,
+    connect, disconnect, refresh, refreshBalances, refreshHistory,
   } = useFreighterWallet()
 
   // Lifted so the floating GroqAssistant can read the last completed search
@@ -46,9 +47,14 @@ export default function App() {
           wallet={wallet}
           transactions={transactions}
           txLoading={txLoading}
+          balance={balance}
+          history={history}
+          connection={connection}
           onConnect={connect}
           onDisconnect={disconnect}
           onRefresh={refresh}
+          onRefreshBalances={refreshBalances}
+          onRefreshHistory={refreshHistory}
         />
 
         {/* Scrolling stats ticker */}
