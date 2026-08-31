@@ -15,8 +15,8 @@ export default function App() {
   const [page, setPage] = useState<Page>('search')
 
   const {
-    wallet, transactions, txLoading,
-    connect, disconnect, refresh,
+    wallet, transactions, txLoading, txLoadingMore, txHasMore, txError,
+    connect, disconnect, refresh, loadMore,
   } = useFreighterWallet()
 
   // Lifted so the floating GroqAssistant can read the last completed search
@@ -78,10 +78,14 @@ export default function App() {
                 <DashboardPage
                   transactions={transactions}
                   txLoading={txLoading}
+                  txLoadingMore={txLoadingMore}
+                  txHasMore={txHasMore}
+                  txError={txError}
                   publicKey={wallet.publicKey}
                   usdcBalance={wallet.usdcBalance}
                   xlmBalance={wallet.xlmBalance}
                   onRefresh={refresh}
+                  onLoadMore={loadMore}
                 />
               )}
             </motion.div>

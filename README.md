@@ -117,6 +117,15 @@ To guarantee that each payment identifier authorizes **exactly one provider call
 - **Payload Invalidation:** Extracts transaction hashes (or SHA-256 fallback hashes of payment headers) and invalidates consumed payloads for a 300-second window.
 - **Concurrency Throttling:** Rapid parallel requests using identical payment payloads are throttled so only one search query proceeds; concurrent duplicates immediately receive HTTP 402 (`Payment payload already consumed`).
 
+### Transaction History Pagination
+
+Dashboard transaction history is **paginated with Horizon cursors** to lift the legacy 15-operation limit:
+
+- **Cursor:** `useFreighterWallet.ts:134` builds `Horizon.Server.operations().forAccount(pub).order('desc').limit(15).cursor(paging_token)` where `paging_token` is the last operation's `paging_token` (fallback `id`). Initial load uses no cursor; `loadMore` appends older records via the stored cursor.
+- **Deduplication:** Appended pages are deduplicated by `op.id` (`useFreighterWallet.ts:238`) so Horizon overlap or filtered `manage_offer` gaps never duplicate rows.
+- **States:** `txLoading` (initial), `txLoadingMore` (pagination), `txHasMore` (records.length === 15), `txError` with retry, and account-switch reset (`currentPublicKeyRef`) are all tested (`src/hooks/useFreighterWallet.test.ts`, `src/pages/DashboardPage.test.tsx`). Dashboard shows *Load older transactions*, *Loading...*, *End of history*, and *Retry* (`DashboardPage.tsx:210`).
+- **Alignment:** Horizon history is a browser concern only; Express (`server/index.ts`), Vercel (`api/search.ts`), and MCP (`mcp-server/index.ts`) share the same `STELLAR_NETWORK`/`HORIZON_URL` constants but do not paginate transactions, so no cross-runtime divergence. x402 settlement semantics remain unchanged.
+
 ### Sequence diagram
 
 ```mermaid
@@ -154,7 +163,7 @@ sequenceDiagram
 stellar-search/
 ├── src/                        # React frontend
 │   ├── hooks/
-│   │   ├── useFreighterWallet.ts   # Real Freighter + Horizon integration
+│   │   ├── useFreighterWallet.ts   # Real Freighter + Horizon integration (cursor pagination)
 │   │   └── useSearch.ts            # Calls real server endpoint
 │   ├── components/
 │   │   ├── AnimatedBackground.tsx  # Canvas animation
@@ -166,7 +175,7 @@ stellar-search/
 │   ├── pages/
 │   │   ├── SearchPage.tsx
 │   │   ├── DocsPage.tsx
-│   │   └── DashboardPage.tsx       # Live Horizon tx history
+│   │   └── DashboardPage.tsx       # Paginated Horizon tx history (cursor pagination, dedup)
 │   └── lib/stellar.ts              # Horizon helpers
 ├── server/
 │   └── index.ts                # Express + @x402/express + Serper.dev + Groq
