@@ -1,7 +1,16 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeAll } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { WalletPanel } from './WalletPanel'
 import type { WalletState } from '../../hooks/useFreighterWallet'
+import { initI18n, loadNamespace } from '../../i18n'
+
+// WalletPanel renders copy through i18next (#345) — mirror main.tsx and
+// initialize the `wallet` namespace so labels resolve (e.g. menu aria-label)
+// instead of coming back as raw keys.
+beforeAll(async () => {
+  await initI18n()
+  await loadNamespace('wallet')
+})
 
 vi.mock('framer-motion', async () => {
   const actual: any = await vi.importActual('framer-motion')
@@ -21,6 +30,7 @@ const baseWallet: WalletState = {
   network: 'TESTNET',
   xlmBalance: '100.0000',
   usdcBalance: '2.000000',
+  hasUsdcTrustline: false,
   loading: false,
   error: null,
 }
